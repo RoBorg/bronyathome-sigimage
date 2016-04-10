@@ -2,7 +2,9 @@
 
 libxml_use_internal_errors(true);
 define('NOW', date('Y-m-d G:i:s'));
-define('CACHE_TIME', 3600); // Length of time to cache data, in seconds
+define('CACHE_TIME', 3600); // Duration to cache data, in seconds
+
+ob_start();
 
 /**
  * Retrieve data from the cache
@@ -14,13 +16,13 @@ define('CACHE_TIME', 3600); // Length of time to cache data, in seconds
 function cacheGet($file)
 {
 	if (!file_exists($file)) {
-		return (object) array();
+		return (object)array();
 	}
 	
 	$allItems = json_decode(file_get_contents($file));
 	
 	if ($allItems === null) {
-		return (object) array();
+		return (object)array();
 	}
 	
 	return $allItems;
@@ -69,7 +71,7 @@ function FAHUser($id)
 		$dom = getDOM('http://folding.extremeoverclocking.com/user_summary.php?s=&u=' . $id);
 		$td = $dom->getElementsByTagName('table')->item(6)->getElementsByTagName('tr')->item(1)->getElementsByTagName('td');
 		
-		$allItems->{$id} = (object) array(
+		$allItems->{$id} = (object)array(
 			'userName' => $dom->getElementsByTagName('h1')->item(0)->textContent,
 			'userTeamRank' => $td->item(0)->textContent,
 			'userOverallRank' => $td->item(1)->textContent,
@@ -99,7 +101,7 @@ function FAHTeam($id)
 		$dom = getDOM('http://folding.extremeoverclocking.com/team_summary.php?s=&t=' . $id);
 		$td = $dom->getElementsByTagName('table')->item(6)->getElementsByTagName('tr')->item(1)->getElementsByTagName('td');
 		
-		$allItems->{$id} = (object) array(
+		$allItems->{$id} = (object)array(
 			'teamName' => $dom->getElementsByTagName('h1')->item(0)->textContent,
 			'teamRank' => $td->item(0)->textContent,
 			'teamPoints' => $td->item(9)->textContent,
@@ -130,7 +132,7 @@ function BOINCUser($id)
 		$tr = $dom->getElementsByTagName('table')->item(0)->getElementsByTagName('tr')->item(1);
 		$total = str_replace(',', '', $tr->getElementsByTagName('td')->item(1)->textContent);
 		
-		$allItems->{$id} = (object) array(
+		$allItems->{$id} = (object)array(
 			'userName' => $dom->getElementsByTagName('span')->item(0)->textContent,
 			'userTeamRank' => $tr->getElementsByTagName('td')->item(10)->textContent,
 			'userOverallRank' => $tr->getElementsByTagName('td')->item(6)->textContent,
@@ -161,7 +163,7 @@ function BOINCTeam($id)
 		$tr = $dom->getElementsByTagName('table')->item(0)->getElementsByTagName('tr')->item(1);
 		$total = str_replace(',', '', $tr->getElementsByTagName('td')->item(1)->textContent);
 		
-		$allItems->{$id} = (object) array(
+		$allItems->{$id} = (object)array(
 			'teamName' => $dom->getElementsByTagName('span')->item(0)->textContent,
 			'teamRank' => $tr->getElementsByTagName('td')->item(6)->textContent,
 			'teamPoints' => number_format(round($total)),
@@ -197,6 +199,9 @@ function EWUser($id)
 			'userPoints' => $obj->forever->points,
 			'userCubes' => $obj->forever->cubes,
 			'userTBs' => $obj->forever->trailblazes,
+			'userPointsDay' => $obj->day->points,
+			'userCubesDay' => $obj->day->cubes,
+			'userTBsDay' => $obj->day->trailblazes,
 			'userTpL1' => $obj->fscore[0]->tp,
 			'userFpL1' => $obj->fscore[0]->fp,
 			'userFnL1' => $obj->fscore[0]->fn,
@@ -213,26 +218,23 @@ function EWUser($id)
 }
 
 /**
- * Draw the text for a single project (Folding@Home or BOINC)
+ * Draw the text for Folding@Home
  *
  * @param resource $template The blank template image
- * @param string $FAHBOINC The project title
- * @param string $pointRank The title of the teamToday statistic
  * @param object $user The user data
  * @param object $team The team data
  */
-function singleImage($template, $FAHBOINC, $pointRank, $user, $team)
+function FAHImage($template, $user, $team)
 {
-	$username =  strlen($user->userName) > 16 ? substr($user->userName, 0, 13) . '...' : $user->userName;
+	$username = strlen($user->userName) > 16 ? substr($user->userName, 0, 13) . '...' : $user->userName;
 	$teamname = strlen($team->teamName) > 16 ? substr($team->teamName, 0, 13) . '...' : $team->teamName;
-	
-	$white = imagecolorallocate($template, 255, 255, 255);
-	$yellow = imagecolorallocate($template, 255, 255, 0);
+	$logo = imagecreatefrompng('images/FAHSig.png');
+	imagecopy($template, $logo, 162, 10, 0, 0, 64, 70);
 	
 	// Left column
 	$centerLine = 110;
 	
-	drawTextLine($template, $FAHBOINC, $username, $centerLine, 25);
+	drawTextLine($template, 'F@H User', $username, $centerLine, 25);
 	drawTextLine($template, 'Rank on Team', $user->userTeamRank, $centerLine, 37);
 	drawTextLine($template, 'Overall Rank', $user->userOverallRank, $centerLine, 49);
 	drawTextLine($template, 'User Points', $user->userPoints, $centerLine, 61);
@@ -245,11 +247,44 @@ function singleImage($template, $FAHBOINC, $pointRank, $user, $team)
 	drawTextLine($template, 'Rank of Team', $team->teamRank, $centerLine, 37);
 	drawTextLine($template, 'Team Points', $team->teamPoints, $centerLine, 49);
 	drawTextLine($template, 'Team PPD', $team->teamPPD, $centerLine, 61);
-	drawTextLine($template, $pointRank, $team->teamToday, $centerLine, 73);
+	drawTextLine($template, 'Points Today', $team->teamToday, $centerLine, 73);
 }
 
 /**
- * Draw the text for combined Folding@Home and BOINC
+ * Draw the text for BOINC
+ *
+ * @param resource $template The blank template image
+ * @param object $user The user data
+ * @param object $team The team data
+ */
+function BOINCImage($template, $user, $team)
+{
+	$username = strlen($user->userName) > 16 ? substr($user->userName, 0, 13) . '...' : $user->userName;
+	$teamname = strlen($team->teamName) > 16 ? substr($team->teamName, 0, 13) . '...' : $team->teamName;
+	$logo = imagecreatefrompng('images/BOINCSig.png');
+	imagecopy($template, $logo, 159, 10, 0, 0, 68, 70);
+	
+	// Left column
+	$centerLine = 110;
+	
+	drawTextLine($template, 'BOINC User', $username, $centerLine, 25);
+	drawTextLine($template, 'Rank on Team', $user->userTeamRank, $centerLine, 37);
+	drawTextLine($template, 'Overall Rank', $user->userOverallRank, $centerLine, 49);
+	drawTextLine($template, 'User Points', $user->userPoints, $centerLine, 61);
+	drawTextLine($template, 'User PPD', $user->userPPD, $centerLine, 73);
+	
+	// Right column
+	$centerLine = 285;
+	
+	drawTextLine($template, 'Team Name', $teamname, $centerLine, 25);
+	drawTextLine($template, 'Rank of Team', $team->teamRank, $centerLine, 37);
+	drawTextLine($template, 'Team Points', $team->teamPoints, $centerLine, 49);
+	drawTextLine($template, 'Team PPD', $team->teamPPD, $centerLine, 61);
+	drawTextLine($template, 'Ranks Risen', $team->teamToday, $centerLine, 73);
+}
+
+/**
+ * Draw the text for Folding@Home and BOINC
  *
  * @param resource $template The blank template image
  * @param object $fahUser The Folding@Home user data
@@ -257,13 +292,12 @@ function singleImage($template, $FAHBOINC, $pointRank, $user, $team)
  * @param object $boincUser The BOINC user data
  * @param object $boincTeam The BOINC team data
  */
-function combiImage($template, $fahUser, $fahTeam, $boincUser, $boincTeam)
+function FAHBOINCImage($template, $fahUser, $fahTeam, $boincUser, $boincTeam)
 {
-	$fahUsername =  strlen($fahUser->userName) > 16 ? substr($fahUser->userName, 0, 13) . '...' : $fahUser->userName;
-	$boincUsername =  strlen($boincUser->userName) > 16 ? substr($boincUser->userName, 0, 13) . '...' : $boincUser->userName;
-	
-	$white = imagecolorallocate($template, 255, 255, 255);
-	$yellow = imagecolorallocate($template, 255, 255, 0);
+	$fahUsername = strlen($fahUser->userName) > 16 ? substr($fahUser->userName, 0, 13) . '...' : $fahUser->userName;
+	$boincUsername = strlen($boincUser->userName) > 16 ? substr($boincUser->userName, 0, 13) . '...' : $boincUser->userName;
+	$logo = imagecreatefrompng('images/FAHBOINCSig.png');
+	imagecopy($template, $logo, 159, 10, 0, 0, 68, 70);
 	
 	// Left column
 	$centerLine = 110;
@@ -288,22 +322,26 @@ function combiImage($template, $fahUser, $fahTeam, $boincUser, $boincTeam)
  * Draw the text for EyeWire
  *
  * @param resource $template The blank template image
- * @param object $user The EyeWire user data
+ * @param object $user The user data
  */
 function EWImage($template, $user)
 {
-	$ewUsername = strlen($user->userName) > 17 ? substr($user->userName, 0, 14) . '...' : $user->userName;
+	$ewUsername = strlen($user->userName) > 16 ? substr($user->userName, 0, 14) . '...' : $user->userName;
 	
-	$tp1 = $user->userTpL1; // Accuracy calculation for L1 cubes
-	$fn1 = $user->userFnL1; // Accuracy calculation for L1 cubes
-	$tp2 = $user->userTpL2; // Accuracy calculation for L2 cubes
-	$fn2 = $user->userFnL2; // Accuracy calculation for L2 cubes
+	$prec1 = $user->userTpL1 / ($user->userTpL1 + $user->userFpL1);
+	$prec2 = $user->userTpL2 / ($user->userTpL2 + $user->userFpL2);
+	$rec1 = $user->userTpL1 / ($user->userTpL1 + $user->userFnL1);
+	$rec2 = $user->userTpL2 / ($user->userTpL2 + $user->userFnL2);
+	$accuracy1 = ($prec1 * $rec1) / ($prec1 + $rec1);
+	$accuracy2 = ($prec2 * $rec2) / ($prec2 + $rec2);
+	$userAccuracy = 100 * ($accuracy1 + $accuracy2);
 	
-	// Accuracy calculation,  averages the values of L1 and L2
-	$userAccuracy = ((($tp1 / ($tp1 + $fn1)) + ($tp2 / ($tp2 + $fn2))) / 2) * 100;
+	$PPC = $user->userPoints / $user->userCubes;
+	$TBF = $user->userTBs / $user->userCubes * 100;
 	
-	$white = imagecolorallocate($template, 255, 255, 255);
-	$yellow = imagecolorallocate($template, 255, 255, 0);
+	$logo = imagecreatefrompng('images/EWSig.png');
+	imagecopy($template, $logo, 160, 10, 0, 0, 68, 70);
+	
 	$centerLine = 110;
 	
 	drawTextLine($template, 'EyeWire User', $ewUsername, $centerLine, 25);
@@ -312,8 +350,13 @@ function EWImage($template, $user)
 	drawTextLine($template, 'Trailblazes', number_format($user->userTBs), $centerLine, 61);
 	drawTextLine($template, 'Accuracy', number_format($userAccuracy) . '%', $centerLine, 73);
 	
-	$logo = imagecreatefrompng('images/eyewire.png');
-	imagecopy($template, $logo, 300, 25, 0, 0, 40, 40);
+	$centerLine = 320;
+	
+	drawTextLine($template, 'Today\'s Points', number_format($user->userPointsDay), $centerLine, 25);
+	drawTextLine($template, 'Today\'s Cubes', number_format($user->userCubesDay), $centerLine, 37);
+	drawTextLine($template, 'Today\'s Trailblazes', number_format($user->userTBsDay), $centerLine, 49);
+	drawTextLine($template, 'Points per Cube', number_format($PPC), $centerLine, 61);
+	drawTextLine($template, 'Trailblaze Frequency', number_format($TBF) . '%', $centerLine, 73);
 }
 
 /**
@@ -330,11 +373,13 @@ function drawTextLine($img, $label, $value, $center, $y)
 	static $yellow = null;
 	static $white = null;
 	
-	if ($yellow === null)
+	if ($yellow === null) {
 		$yellow = imagecolorallocate($img, 255, 255, 0);
+	}
 	
-	if ($white === null)
+	if ($white === null) {
 		$white = imagecolorallocate($img, 255, 255, 255);
+	}
 	
 	drawText($img, $white, $label . ': ', $center, $y, 'right');
 	drawText($img, $yellow, $value, $center, $y, 'left');
@@ -356,12 +401,9 @@ function drawText($img, $colour, $text, $x, $y, $align)
 	$size = 10;
 	$angle = 0;
 	
-	if ($align === 'left')
-	{
+	if ($align === 'left') {
 		imagettftext($img, $size, $angle, $x, $y, $colour, $font, $text);
-	}
-	else
-	{
+	} else {
 		$bbox = imagettfbbox($size, $angle, $font, $text);
 		$x -= $bbox[0];
 		$x -= $bbox[2];
@@ -374,14 +416,19 @@ $templateFile = isset($_GET['b']) && file_exists('images/sigimages/' . $_GET['b'
 $template = imagecreatefrompng($templateFile);
 
 if (isset($_GET['u']) && isset($_GET['t']) && !isset($_GET['w'])) {
-	singleImage($template, 'F@H User', 'Points Today', FAHUser($_GET['u']), FAHTeam($_GET['t']));
-} elseif (!isset($_GET['u']) && isset($_GET['t']) && isset($_GET['w'])) {
-	singleImage($template, 'BOINC User', 'Ranks Risen', BOINCUser($_GET['w']), BOINCTeam($_GET['t']));
-} elseif (isset($_GET['u']) && isset($_GET['t']) && isset($_GET['w']) && isset($_GET['p'])) {
-	combiImage($template, FAHUser($_GET['u']), FAHTeam($_GET['t']), BOINCUser($_GET['w']), BOINCTeam($_GET['p']));
-} elseif (isset($_GET['e'])) {
+	FAHImage($template, FAHUser($_GET['u']), FAHTeam($_GET['t']));
+} elseif(!isset($_GET['u']) && isset($_GET['t']) && isset($_GET['w'])) {
+	BOINCImage($template, BOINCUser($_GET['w']), BOINCTeam($_GET['t']));
+} elseif(isset($_GET['u']) && isset($_GET['t']) && isset($_GET['w']) && isset($_GET['p'])) {
+	FAHBOINCImage($template, FAHUser($_GET['u']), FAHTeam($_GET['t']), BOINCUser($_GET['w']), BOINCTeam($_GET['p']));
+} elseif(isset($_GET['e'])) {
 	EWImage($template, EWUser($_GET['e']));
 }
 
-header('Content-Type: image/png');
-imagepng($template);
+$error = ob_get_flush();
+
+if (!$error)
+{
+	header('Content-Type: image/png');
+	imagepng($template);
+}
