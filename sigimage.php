@@ -7,6 +7,18 @@ define('CACHE_TIME', 3600); // Duration to cache data, in seconds
 ob_start();
 
 /**
+ * Debug print
+ *
+ * @param mixed $var the variable to output
+ */
+function printR($var)
+{
+	ob_start();
+	print_r($var);
+	print('<pre>' . htmlspecialchars(ob_get_clean()) . '</pre>');
+}
+
+/**
  * Retrieve data from the cache
  *
  * @param string $file The cache file name
@@ -133,7 +145,7 @@ function BOINCUser($id)
 		$total = str_replace(',', '', $tr->getElementsByTagName('td')->item(1)->textContent);
 		
 		$allItems->{$id} = (object)array(
-			'userName' => $dom->getElementsByTagName('span')->item(0)->textContent,
+			'userName' => preg_replace('/^.*- (.+) \|.*$/', '$1', $dom->getElementsByTagName('title')->item(0)->textContent),
 			'userTeamRank' => $tr->getElementsByTagName('td')->item(10)->textContent,
 			'userOverallRank' => $tr->getElementsByTagName('td')->item(6)->textContent,
 			'userPoints' => number_format(round($total)),
@@ -164,7 +176,7 @@ function BOINCTeam($id)
 		$total = str_replace(',', '', $tr->getElementsByTagName('td')->item(1)->textContent);
 		
 		$allItems->{$id} = (object)array(
-			'teamName' => $dom->getElementsByTagName('span')->item(0)->textContent,
+			'teamName' => preg_replace('/^.*- (.+) \|.*$/', '$1', $dom->getElementsByTagName('title')->item(0)->textContent),
 			'teamRank' => $tr->getElementsByTagName('td')->item(6)->textContent,
 			'teamPoints' => number_format(round($total)),
 			'teamPPD' => $tr->getElementsByTagName('td')->item(3)->textContent,
