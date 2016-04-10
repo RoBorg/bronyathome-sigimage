@@ -405,7 +405,7 @@ function drawTextLine($img, $label, $value, $center, $y)
  * @param string $text The text to draw
  * @param string $x The x-coordinate to align the label and value to
  * @param string $y The y-coordinate of the text
- * @param string $align "left" or "right" to align the text
+ * @param string $align "left", "center" or "right" to align the text
  */
 function drawText($img, $colour, $text, $x, $y, $align)
 {
@@ -414,6 +414,11 @@ function drawText($img, $colour, $text, $x, $y, $align)
 	$angle = 0;
 	
 	if ($align === 'left') {
+		imagettftext($img, $size, $angle, $x, $y, $colour, $font, $text);
+	} elseif ($align === 'center') {
+		$bbox = imagettfbbox($size, $angle, $font, $text);
+		$x -= ($bbox[2] - $bbox[0]) / 2;
+		
 		imagettftext($img, $size, $angle, $x, $y, $colour, $font, $text);
 	} else {
 		$bbox = imagettfbbox($size, $angle, $font, $text);
@@ -424,8 +429,43 @@ function drawText($img, $colour, $text, $x, $y, $align)
 	}
 }
 
+/**
+ * Draw translucent background, Brony@Home text etc
+ *
+ * @param resource $img The image to draw onto
+ */
+function drawSurrounding($img)
+{
+	$box = imagecolorallocatealpha($img, 70, 70, 70, 30);
+	
+	imagefilledrectangle($img, 7, 7, 398, 84, $box);
+	
+	$shadow = imagecolorallocatealpha($img, 0, 0, 0, 60);
+	
+	imagefilledrectangle($img, 7, 7, 398, 8, $shadow); // Top
+	imagefilledrectangle($img, 7, 83, 398, 84, $shadow); // Bottom
+	imagefilledrectangle($img, 7, 9, 8, 82, $shadow); // Left
+	imagefilledrectangle($img, 397, 9, 398, 82, $shadow); // Right
+	
+	$white = imagecolorallocate($img, 255, 255, 255);
+	$textX = 203;
+	$textY = 96;
+	
+	for ($y = -1; $y < 2; $y++)
+	{
+		for ($x = -1; $x < 2; $x++)
+		{
+			drawText($img, $shadow, '~Brony@Home: Folding is Magic~', $textX + $x, $textY + $y, 'center');
+		}
+	}
+	
+	drawText($img, $white, '~Brony@Home: Folding is Magic~', $textX, $textY, 'center');
+}
+
 $templateFile = isset($_GET['b']) && file_exists('images/sigimages/' . $_GET['b'] . '.png') ? 'images/sigimages/' . $_GET['b'] . '.png' : 'images/sigimages/luna1.png';
 $template = imagecreatefrompng($templateFile);
+
+drawSurrounding($template);
 
 if (isset($_GET['u']) && isset($_GET['t']) && !isset($_GET['w'])) {
 	FAHImage($template, FAHUser($_GET['u']), FAHTeam($_GET['t']));
